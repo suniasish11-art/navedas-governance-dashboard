@@ -10,11 +10,19 @@ import numpy as np
 # ── CSV Loader ────────────────────────────────────────────────────────────────
 
 def find_csv():
+    app_dir = os.path.dirname(os.path.abspath(__file__))
     candidates = [
-        os.path.join(os.path.dirname(__file__), "..", "ecommerce_ production_dataset_5000_rows.csv"),
+        # 1. Same folder as app (Streamlit Cloud — renamed, no spaces)
+        os.path.join(app_dir, "ecommerce_production_dataset.csv"),
+        # 2. Same folder with original name
+        os.path.join(app_dir, "ecommerce_ production_dataset_5000_rows.csv"),
+        # 3. Parent folder (local dev)
+        os.path.join(app_dir, "..", "ecommerce_ production_dataset_5000_rows.csv"),
+        os.path.join(app_dir, "..", "ecommerce_production_dataset.csv"),
+        # 4. Home directory fallbacks
         os.path.join(os.path.expanduser("~"), "ecommerce_ production_dataset_5000_rows.csv"),
+        os.path.join(os.path.expanduser("~"), "ecommerce_production_dataset.csv"),
         os.path.join(os.path.expanduser("~"), "Downloads", "ecommerce_ production_dataset_5000_rows.csv"),
-        os.path.join(os.path.expanduser("~"), "Documents", "ecommerce_ production_dataset_5000_rows.csv"),
     ]
     for p in candidates:
         if os.path.exists(p):
