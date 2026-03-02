@@ -149,8 +149,8 @@ def inject_css():
     """, unsafe_allow_html=True)
 
 
-# ── Data load (TTL-based cache for live refresh) ──────────────────────────────
-@st.cache_data(ttl=30, show_spinner=False)
+# ── Data load (manual-refresh cache — no auto-expire) ─────────────────────────
+@st.cache_data(show_spinner=False)
 def get_data():
     if _LIVE_STORE and _db_exists():
         return load_and_compute(sqlite_path=_LIVE_DB)
@@ -176,33 +176,61 @@ def render_sidebar():
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("### Refresh Settings")
+        # ── Agent Control ─────────────────────────────────────────────────────
+        st.markdown("### Agent Control")
+        st.caption("Click to run the agent — it processes new orders and updates the dashboard.")
 
-        interval_label = st.selectbox(
-            "Auto-Refresh Interval",
-            ["30 seconds", "1 minute", "5 minutes", "10 minutes", "Off"],
-            index=1,
+        n_orders = st.number_input(
+            "Orders per batch", min_value=5, max_value=500, value=20, step=5,
             label_visibility="visible",
         )
 
-        interval_map = {
-            "30 seconds": 30_000,
-            "1 minute":   60_000,
-            "5 minutes":  300_000,
-            "10 minutes": 600_000,
-            "Off":        None,
-        }
-        interval_ms = interval_map[interval_label]
+        run_clicked = st.button(
+            "Run Agent — Load New Data",
+            use_container_width=True, type="primary",
+        )
 
-        if AUTOREFRESH_AVAILABLE and interval_ms:
-            count = st_autorefresh(interval=interval_ms, key="live_refresh")
-            st.caption(f"Refresh #{count} | every {interval_label}")
-        elif not AUTOREFRESH_AVAILABLE:
-            st.warning("Install `streamlit-autorefresh` for auto-refresh.")
+        if run_clicked:
+            import pandas as _pd
+            from pipeline import find_csv as _find_csv
+            import live_store as _ls
+            from agent import generate_orders as _gen
 
-        if st.button("Refresh Now", use_container_width=True, type="primary"):
-            get_data.clear()
-            st.rerun()
+            _csv = _find_csv()
+            if not _csv:
+                st.error("CSV dataset not found.")
+            else:
+                with st.spinner("Agent processing new orders..."):
+                    if not _ls.db_exists():
+                        _ls.init_from_csv(_csv)
+                    _tmpl = _pd.read_csv(_csv, parse_dates=["order_date"], dayfirst=True)
+                    _tmpl.columns = _tmpl.columns.str.strip()
+                    _stats  = _ls.get_stats()
+                    _bid    = _stats["batches"] + 1
+                    _new_df = _gen(_tmpl, n=int(n_orders), batch_num=_bid)
+                    _ls.append_orders(_new_df, batch_id=_bid)
+                    get_data.clear()
+                    st.session_state.agent_result = {
+                        "batch":     _bid,
+                        "n":         len(_new_df),
+                        "recovered": int(_new_df["intervention_success"].sum()),
+                        "rev_saved": float(_new_df["revenue_prevented_by_navedas"].sum()),
+                    }
+                st.rerun()
+
+        # Show result of last agent run
+        if "agent_result" in st.session_state:
+            r = st.session_state.agent_result
+            st.markdown(f"""
+            <div style="background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.35);
+                        border-radius:8px;padding:.7rem .9rem;font-size:.72rem;
+                        color:#166534;margin-top:.4rem;line-height:1.8;">
+                <b>Batch #{r['batch']} complete</b><br>
+                +{r['n']} orders processed<br>
+                Recovered: {r['recovered']} orders<br>
+                Rev saved: ${r['rev_saved']:,.2f}
+            </div>
+            """, unsafe_allow_html=True)
 
         # ── Agent Status ──────────────────────────────────────────────────────
         if _LIVE_STORE and _db_exists():
@@ -245,14 +273,13 @@ def render_sidebar():
             <b>Orders:</b> 5,000+<br>
             <b>Engine:</b> Navedas AI Governance<br>
             <b>Stack:</b> Streamlit + Plotly<br>
-            <b>Data:</b> Auto-reloaded on each refresh
+            <b>Data:</b> Updates on agent run
         </div>
         """, unsafe_allow_html=True)
 
         st.divider()
         st.markdown("### Quick KPIs")
         # populated after data load — placeholder here
-    return interval_ms
 
 
 def render_sidebar_kpis(kpis):
@@ -459,22 +486,7 @@ def kcard(label, value, sub, color="blue"):
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     inject_css()
-    interval_ms = render_sidebar()
-
-    # ── Live file-change detection ────────────────────────────────────────────
-    # If agent wrote new data, instantly clear cache (don't wait for TTL)
-    if _LIVE_STORE and _db_exists():
-        current_mtime = _get_mtime()
-        if "data_mtime" not in st.session_state:
-            st.session_state.data_mtime  = current_mtime
-            st.session_state.new_records = 0
-        elif current_mtime > st.session_state.data_mtime:
-            prev_total = st.session_state.get("last_total", 0)
-            get_data.clear()                         # force immediate reload
-            st.session_state.data_mtime  = current_mtime
-            st.session_state.data_changed = True
-        else:
-            st.session_state.data_changed = False
+    render_sidebar()
 
     with st.spinner("Loading dataset and computing KPIs..."):
         try:
@@ -483,16 +495,6 @@ def main():
             st.error(str(e))
             st.info("Tip: place the CSV file one folder above this app, or in your home directory.")
             st.stop()
-
-    # Track total for delta display
-    if "last_total" not in st.session_state:
-        st.session_state.last_total = kpis["total_orders"]
-    new_since_last = kpis["total_orders"] - st.session_state.last_total
-    st.session_state.last_total = kpis["total_orders"]
-
-    # Toast notification when agent adds new data
-    if st.session_state.get("data_changed") and new_since_last > 0:
-        st.toast(f"Agent added {new_since_last:,} new orders — dashboard updated!", icon="📡")
 
     now_str = datetime.now().strftime("%B %d, %Y  %H:%M:%S")
     render_sidebar_kpis(kpis)
