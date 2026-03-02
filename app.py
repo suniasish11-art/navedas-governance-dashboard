@@ -21,7 +21,7 @@ from pipeline import load_and_compute
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Navedas | Shopify Governance Dashboard",
+    page_title="Navedas | Executive Governance Dashboard",
     page_icon="chart_with_upwards_trend",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -194,7 +194,6 @@ def render_sidebar():
         st.markdown("### Dashboard Info")
         st.markdown(f"""
         <div style="font-size:.75rem;color:{SUB};line-height:1.7;">
-            <b>Platform:</b> Shopify<br>
             <b>Orders:</b> 5,000<br>
             <b>Engine:</b> Navedas AI Governance<br>
             <b>Stack:</b> Streamlit + Plotly<br>
@@ -430,10 +429,9 @@ def main():
     <div class="hero">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
             <div>
-                <div class="hero-eyebrow">Shopify Store Operations &nbsp;|&nbsp; Executive Governance Dashboard</div>
-                <div class="hero-title">Navedas AI Governance &amp; Order Recovery Report</div>
-                <div class="hero-sub">Shopify Order Cancellation Intelligence &nbsp;|&nbsp; AI Logic Gap Recovery &nbsp;|&nbsp;
-                                      Revenue Protection &nbsp;|&nbsp; Margin &amp; ROI Analysis</div>
+                <div class="hero-eyebrow">Executive Governance Dashboard</div>
+                <div class="hero-title">Navedas Intervention Impact Report</div>
+                <div class="hero-sub">AI Logic Gap Recovery &nbsp;|&nbsp; Revenue Protection &nbsp;|&nbsp; Margin Preservation &nbsp;|&nbsp; ROI Analysis</div>
             </div>
             <div style="text-align:right;flex-shrink:0;padding-left:1rem;">
                 <div style="background:rgba(34,197,94,0.2);border:1px solid rgba(34,197,94,0.5);
@@ -445,7 +443,7 @@ def main():
             </div>
         </div>
         <div class="hero-badges">
-            <span class="hero-badge">Shopify Orders: {fmt_n(kpis['total_orders'])}</span>
+            <span class="hero-badge">Orders Analyzed: {fmt_n(kpis['total_orders'])}</span>
             <span class="hero-badge">AI Cancel Rate: {fmt_pct(kpis['ai_cancel_rate'])}</span>
             <span class="hero-badge">Governance ROI: {fmt_x(kpis['gov_roi'])}</span>
             <span class="hero-badge">Recovery Rate: {fmt_pct(kpis['recovery_rate_pool'])}</span>
@@ -460,7 +458,7 @@ def main():
         <div class="s-step">
             <div class="s-icon">AI</div>
             <div class="s-num">{fmt_pct(kpis['ai_cancel_rate'])}</div>
-            <div class="s-lbl">Shopify orders auto-cancelled</div>
+            <div class="s-lbl">Orders auto-cancelled by AI</div>
         </div>
         <div class="s-arr">-&gt;</div>
         <div class="s-step">
@@ -504,16 +502,16 @@ def main():
     # ── AI Performance ────────────────────────────────────────────────────────
     st.markdown('<div class="sec-lbl">AI Performance Layer</div>', unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
-    with c1: kcard("Total Shopify Orders", fmt_n(kpis["total_orders"]), "All orders analyzed", "blue")
+    with c1: kcard("Total Orders", fmt_n(kpis["total_orders"]), "All orders analyzed", "blue")
     with c2: kcard("AI Cancel Rate", fmt_pct(kpis["ai_cancel_rate"]),
                    f"{fmt_n(kpis['ai_cancelled'])} orders auto-cancelled by AI", "red")
     with c3: kcard("Revenue Lost (AI-Only)", fmt_usd(kpis["rev_lost_before"]),
-                   "Store revenue lost before governance", "red")
+                   "Revenue lost before governance", "red")
     with c4: kcard("Profit Lost (AI-Only)", fmt_usd(kpis["profit_lost_before"]),
                    "Gross margin impact before Navedas", "red")
 
     # ── Recoverability ────────────────────────────────────────────────────────
-    st.markdown('<div class="sec-lbl">Shopify Order Recoverability Layer</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-lbl">Order Recoverability Layer</div>', unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
     with c1: kcard("Recoverable Orders", fmt_n(kpis["recoverable"]),
                    f"{fmt_pct(kpis['pct_recoverable'])} of AI cancellations", "amber")
@@ -525,7 +523,7 @@ def main():
                    "Recovered / Total AI Cancelled", "green")
 
     # ── Governance Impact ─────────────────────────────────────────────────────
-    st.markdown('<div class="sec-lbl">Governance Impact Layer -- Navedas on Shopify</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-lbl">Governance Impact Layer -- Navedas Intervention</div>', unsafe_allow_html=True)
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1: kcard("Revenue Prevented", fmt_usd(kpis["rev_prevented"]),
                    "Revenue rescued by Navedas", "green")
@@ -606,7 +604,7 @@ def main():
     with wc:
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
         st.markdown('<div class="ct">Revenue Waterfall -- AI-Only vs After Navedas Governance</div>', unsafe_allow_html=True)
-        st.markdown('<div class="cs">How Navedas converts Shopify cancellation losses into recovered revenue</div>', unsafe_allow_html=True)
+        st.markdown('<div class="cs">How Navedas converts cancellation losses into recovered revenue</div>', unsafe_allow_html=True)
         st.plotly_chart(waterfall_fig(kpis), width="stretch")
         st.markdown('</div>', unsafe_allow_html=True)
     with fc:
@@ -620,7 +618,7 @@ def main():
     st.markdown('<div class="sec-lbl">Trend Analysis</div>', unsafe_allow_html=True)
     st.markdown('<div class="chart-card">', unsafe_allow_html=True)
     st.markdown('<div class="ct">Cancellation & Recovery Rate Over Time (Monthly)</div>', unsafe_allow_html=True)
-    st.markdown('<div class="cs">Shopify AI cancel rate vs Navedas recovery rate by month</div>', unsafe_allow_html=True)
+    st.markdown('<div class="cs">AI cancel rate vs Navedas recovery rate by month</div>', unsafe_allow_html=True)
     st.plotly_chart(trend_fig(trend_df), width="stretch")
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -661,7 +659,7 @@ def main():
         st.markdown('</div>', unsafe_allow_html=True)
 
     # ── Margin Comparison Table ───────────────────────────────────────────────
-    st.markdown('<div class="sec-lbl">Shopify P&amp;L Comparison -- Before vs After Navedas Governance</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-lbl">P&amp;L Comparison -- Before vs After Navedas Governance</div>', unsafe_allow_html=True)
     st.markdown('<div class="chart-card">', unsafe_allow_html=True)
     margin_table = pd.DataFrame({
         "Metric": ["Revenue Lost", "Profit Lost", "Margin Saved", "Net Profit Impact", "Intervention Cost"],
@@ -690,7 +688,7 @@ def main():
     st.dataframe(margin_table, width="stretch", hide_index=True)
     st.markdown(f"""
     <div class="insight">
-        Navedas governance recovered <strong>{fmt_usd(kpis['rev_prevented'])}</strong> in Shopify store revenue,
+        Navedas governance recovered <strong>{fmt_usd(kpis['rev_prevented'])}</strong> in revenue,
         preserved <strong>{fmt_usd(kpis['margin_saved'])}</strong> in gross margin, and delivered a
         <strong>{fmt_x(kpis['gov_roi'])} ROI</strong> on a total intervention cost of only
         <strong>{fmt_usd(kpis['intervention_cost'])}</strong>.
@@ -732,8 +730,8 @@ def main():
     # ── Footer ────────────────────────────────────────────────────────────────
     st.markdown(f"""
     <div class="footer">
-        Navedas &mdash; Shopify AI Governance Dashboard &nbsp;|&nbsp;
-        {fmt_n(kpis['total_orders'])} Shopify orders analyzed &nbsp;|&nbsp;
+        Navedas &mdash; Executive Governance Dashboard &nbsp;|&nbsp;
+        {fmt_n(kpis['total_orders'])} orders analyzed &nbsp;|&nbsp;
         Governance ROI: {fmt_x(kpis['gov_roi'])} &nbsp;|&nbsp;
         Built with Streamlit + Plotly
     </div>
