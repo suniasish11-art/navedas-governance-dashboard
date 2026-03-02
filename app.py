@@ -1,5 +1,5 @@
 """
-app.py -- Executive Governance Dashboard
+app.py -- Executive Governance Dashboard (LIVE)
 Navedas Intervention ROI | Streamlit + Plotly
 Run: streamlit run app.py --server.port 8504
 """
@@ -8,6 +8,13 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
+from datetime import datetime
+
+try:
+    from streamlit_autorefresh import st_autorefresh
+    AUTOREFRESH_AVAILABLE = True
+except ImportError:
+    AUTOREFRESH_AVAILABLE = False
 
 sys.path.insert(0, os.path.dirname(__file__))
 from pipeline import load_and_compute
@@ -17,7 +24,7 @@ st.set_page_config(
     page_title="Navedas | Shopify Governance Dashboard",
     page_icon="chart_with_upwards_trend",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ── Design tokens ─────────────────────────────────────────────────────────────
@@ -130,10 +137,89 @@ def inject_css():
     """, unsafe_allow_html=True)
 
 
-# ── Data load ─────────────────────────────────────────────────────────────────
-@st.cache_data(show_spinner=False)
+# ── Data load (TTL-based cache for live refresh) ──────────────────────────────
+@st.cache_data(ttl=30, show_spinner=False)
 def get_data():
     return load_and_compute()
+
+
+# ── Live sidebar ──────────────────────────────────────────────────────────────
+def render_sidebar():
+    with st.sidebar:
+        st.markdown(f"""
+        <div style="background:linear-gradient(135deg,{BLUE},#1e40af);border-radius:12px;
+                    padding:1.2rem;margin-bottom:1.2rem;color:#fff;text-align:center;">
+            <div style="font-size:.65rem;letter-spacing:.15em;text-transform:uppercase;
+                        color:rgba(255,255,255,.7);margin-bottom:.3rem;">Status</div>
+            <div style="font-size:1.1rem;font-weight:800;">
+                <span style="display:inline-block;width:8px;height:8px;background:#22c55e;
+                             border-radius:50%;margin-right:6px;animation:none;"></span>
+                LIVE
+            </div>
+            <div style="font-size:.7rem;color:rgba(255,255,255,.75);margin-top:.3rem;">
+                Last updated: {datetime.now().strftime('%H:%M:%S')}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("### Refresh Settings")
+
+        interval_label = st.selectbox(
+            "Auto-Refresh Interval",
+            ["30 seconds", "1 minute", "5 minutes", "10 minutes", "Off"],
+            index=1,
+            label_visibility="visible",
+        )
+
+        interval_map = {
+            "30 seconds": 30_000,
+            "1 minute":   60_000,
+            "5 minutes":  300_000,
+            "10 minutes": 600_000,
+            "Off":        None,
+        }
+        interval_ms = interval_map[interval_label]
+
+        if AUTOREFRESH_AVAILABLE and interval_ms:
+            count = st_autorefresh(interval=interval_ms, key="live_refresh")
+            st.caption(f"Refresh #{count} | every {interval_label}")
+        elif not AUTOREFRESH_AVAILABLE:
+            st.warning("Install `streamlit-autorefresh` for auto-refresh.")
+
+        if st.button("Refresh Now", use_container_width=True, type="primary"):
+            get_data.clear()
+            st.rerun()
+
+        st.divider()
+        st.markdown("### Dashboard Info")
+        st.markdown(f"""
+        <div style="font-size:.75rem;color:{SUB};line-height:1.7;">
+            <b>Platform:</b> Shopify<br>
+            <b>Orders:</b> 5,000<br>
+            <b>Engine:</b> Navedas AI Governance<br>
+            <b>Stack:</b> Streamlit + Plotly<br>
+            <b>Data:</b> Auto-reloaded on each refresh
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.divider()
+        st.markdown("### Quick KPIs")
+        # populated after data load — placeholder here
+    return interval_ms
+
+
+def render_sidebar_kpis(kpis):
+    """Fill quick KPI section in sidebar after data is loaded."""
+    with st.sidebar:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Total Orders",   fmt_n(kpis["total_orders"]))
+            st.metric("AI Cancel Rate", fmt_pct(kpis["ai_cancel_rate"]))
+            st.metric("Recovered",      fmt_n(kpis["recovered"]))
+        with col2:
+            st.metric("Rev Saved",      fmt_usd(kpis["rev_prevented"]))
+            st.metric("Margin Saved",   fmt_usd(kpis["margin_saved"]))
+            st.metric("ROI",            fmt_x(kpis["gov_roi"]))
 
 
 # ── Chart builders ────────────────────────────────────────────────────────────
@@ -326,6 +412,7 @@ def kcard(label, value, sub, color="blue"):
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     inject_css()
+    interval_ms = render_sidebar()
 
     with st.spinner("Loading dataset and computing KPIs..."):
         try:
@@ -335,13 +422,28 @@ def main():
             st.info("Tip: place the CSV file one folder above this app, or in your home directory.")
             st.stop()
 
+    now_str = datetime.now().strftime("%B %d, %Y  %H:%M:%S")
+    render_sidebar_kpis(kpis)
+
     # ── Hero ─────────────────────────────────────────────────────────────────
     st.markdown(f"""
     <div class="hero">
-        <div class="hero-eyebrow">Shopify Store Operations &nbsp;|&nbsp; Executive Governance Dashboard</div>
-        <div class="hero-title">Navedas AI Governance &amp; Order Recovery Report</div>
-        <div class="hero-sub">Shopify Order Cancellation Intelligence &nbsp;|&nbsp; AI Logic Gap Recovery &nbsp;|&nbsp;
-                              Revenue Protection &nbsp;|&nbsp; Margin &amp; ROI Analysis</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div>
+                <div class="hero-eyebrow">Shopify Store Operations &nbsp;|&nbsp; Executive Governance Dashboard</div>
+                <div class="hero-title">Navedas AI Governance &amp; Order Recovery Report</div>
+                <div class="hero-sub">Shopify Order Cancellation Intelligence &nbsp;|&nbsp; AI Logic Gap Recovery &nbsp;|&nbsp;
+                                      Revenue Protection &nbsp;|&nbsp; Margin &amp; ROI Analysis</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;padding-left:1rem;">
+                <div style="background:rgba(34,197,94,0.2);border:1px solid rgba(34,197,94,0.5);
+                            border-radius:100px;padding:.3rem 1rem;font-size:.78rem;font-weight:700;
+                            color:#86efac;margin-bottom:.4rem;display:inline-block;">
+                    &#9679; LIVE
+                </div>
+                <div style="font-size:.7rem;color:rgba(255,255,255,.6);">Updated: {now_str}</div>
+            </div>
+        </div>
         <div class="hero-badges">
             <span class="hero-badge">Shopify Orders: {fmt_n(kpis['total_orders'])}</span>
             <span class="hero-badge">AI Cancel Rate: {fmt_pct(kpis['ai_cancel_rate'])}</span>
