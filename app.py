@@ -19,6 +19,18 @@ except ImportError:
 sys.path.insert(0, os.path.dirname(__file__))
 from pipeline import load_and_compute
 
+# ── Live store (SQLite agent integration) ─────────────────────────────────────
+try:
+    from live_store import DB_PATH as _LIVE_DB, db_exists as _db_exists
+    from live_store import get_mtime as _get_mtime, get_stats as _get_stats
+    _LIVE_STORE = True
+except ImportError:
+    _LIVE_STORE = False
+    def _db_exists():  return False
+    def _get_mtime():  return 0.0
+    def _get_stats():  return {"total": 0, "batches": 0, "latest_ts": None, "latest_n": 0}
+    _LIVE_DB = None
+
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Navedas | Executive Governance Dashboard",
@@ -140,6 +152,8 @@ def inject_css():
 # ── Data load (TTL-based cache for live refresh) ──────────────────────────────
 @st.cache_data(ttl=30, show_spinner=False)
 def get_data():
+    if _LIVE_STORE and _db_exists():
+        return load_and_compute(sqlite_path=_LIVE_DB)
     return load_and_compute()
 
 
@@ -190,11 +204,45 @@ def render_sidebar():
             get_data.clear()
             st.rerun()
 
+        # ── Agent Status ──────────────────────────────────────────────────────
+        if _LIVE_STORE and _db_exists():
+            st.divider()
+            st.markdown("### Agent Status")
+            stats = _get_stats()
+            # Format "last run" time
+            if stats["latest_ts"]:
+                try:
+                    from datetime import timezone
+                    ts  = datetime.fromisoformat(stats["latest_ts"])
+                    ago = int((datetime.utcnow() - ts).total_seconds())
+                    ts_str = (f"{ago}s ago" if ago < 60
+                              else f"{ago//60}m ago" if ago < 3600
+                              else f"{ago//3600}h ago")
+                except Exception:
+                    ts_str = str(stats["latest_ts"])[:16]
+            else:
+                ts_str = "No agent runs yet"
+
+            dot_color = GREEN if stats["batches"] > 0 else AMBER
+            mode_label = "LIVE AGENT CONNECTED" if stats["batches"] > 0 else "BASELINE DATA"
+            st.markdown(f"""
+            <div style="background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.25);
+                        border-radius:10px;padding:.85rem 1rem;font-size:.74rem;line-height:1.9;">
+                <div style="color:{dot_color};font-weight:700;margin-bottom:.3rem;">
+                    &#9679; {mode_label}
+                </div>
+                <b>DB Orders:</b> {stats['total']:,}<br>
+                <b>Agent Batches:</b> {stats['batches']}<br>
+                <b>Last Batch:</b> {stats['latest_n']} orders<br>
+                <b>Last Run:</b> {ts_str}
+            </div>
+            """, unsafe_allow_html=True)
+
         st.divider()
         st.markdown("### Dashboard Info")
         st.markdown(f"""
         <div style="font-size:.75rem;color:{SUB};line-height:1.7;">
-            <b>Orders:</b> 5,000<br>
+            <b>Orders:</b> 5,000+<br>
             <b>Engine:</b> Navedas AI Governance<br>
             <b>Stack:</b> Streamlit + Plotly<br>
             <b>Data:</b> Auto-reloaded on each refresh
@@ -413,6 +461,21 @@ def main():
     inject_css()
     interval_ms = render_sidebar()
 
+    # ── Live file-change detection ────────────────────────────────────────────
+    # If agent wrote new data, instantly clear cache (don't wait for TTL)
+    if _LIVE_STORE and _db_exists():
+        current_mtime = _get_mtime()
+        if "data_mtime" not in st.session_state:
+            st.session_state.data_mtime  = current_mtime
+            st.session_state.new_records = 0
+        elif current_mtime > st.session_state.data_mtime:
+            prev_total = st.session_state.get("last_total", 0)
+            get_data.clear()                         # force immediate reload
+            st.session_state.data_mtime  = current_mtime
+            st.session_state.data_changed = True
+        else:
+            st.session_state.data_changed = False
+
     with st.spinner("Loading dataset and computing KPIs..."):
         try:
             df, kpis, trend_df, reason_df, resid_df, demand_df = get_data()
@@ -420,6 +483,16 @@ def main():
             st.error(str(e))
             st.info("Tip: place the CSV file one folder above this app, or in your home directory.")
             st.stop()
+
+    # Track total for delta display
+    if "last_total" not in st.session_state:
+        st.session_state.last_total = kpis["total_orders"]
+    new_since_last = kpis["total_orders"] - st.session_state.last_total
+    st.session_state.last_total = kpis["total_orders"]
+
+    # Toast notification when agent adds new data
+    if st.session_state.get("data_changed") and new_since_last > 0:
+        st.toast(f"Agent added {new_since_last:,} new orders — dashboard updated!", icon="📡")
 
     now_str = datetime.now().strftime("%B %d, %Y  %H:%M:%S")
     render_sidebar_kpis(kpis)

@@ -1,8 +1,9 @@
 """
 pipeline.py — Data ingestion and KPI computation for Executive Governance Dashboard.
-Single entry point: load_and_compute(csv_path) -> (df, kpis, trend_df, reason_df, residual_df, demand_df)
+Single entry point: load_and_compute(csv_path, sqlite_path) -> (df, kpis, trend_df, reason_df, residual_df, demand_df)
 """
 import os
+import sqlite3
 import pandas as pd
 import numpy as np
 
@@ -37,18 +38,38 @@ def load_csv(path=None):
         raise FileNotFoundError("Dataset not found. Place the CSV in the parent folder of this app.")
     df = pd.read_csv(path, parse_dates=["order_date"], dayfirst=True)
     df.columns = df.columns.str.strip()
-    num_cols = [
-        "ai_cancel_flag", "recoverable_flag", "intervention_attempted_by_navedas",
-        "intervention_success", "revenue_lost_before_ai_only", "revenue_prevented_by_navedas",
-        "avoidable_revenue_loss_after_navedas", "profit_lost_before_ai_only",
-        "profit_lost_after_navedas", "margin_saved_after_navedas", "intervention_cost",
-        "net_profit_impact_due_to_navedas", "recovery_rate_flag",
-        "total_order_value", "margin_percent", "unit_price", "quantity",
-    ]
-    for c in num_cols:
+    return _coerce_numerics(df)
+
+
+# ── SQLite Loader (live agent data) ───────────────────────────────────────────
+
+_NUM_COLS = [
+    "ai_cancel_flag", "recoverable_flag", "intervention_attempted_by_navedas",
+    "intervention_success", "revenue_lost_before_ai_only", "revenue_prevented_by_navedas",
+    "avoidable_revenue_loss_after_navedas", "profit_lost_before_ai_only",
+    "profit_lost_after_navedas", "margin_saved_after_navedas", "intervention_cost",
+    "net_profit_impact_due_to_navedas", "recovery_rate_flag",
+    "total_order_value", "margin_percent", "unit_price", "quantity",
+]
+
+
+def _coerce_numerics(df):
+    """Apply numeric coercion to expected columns in-place."""
+    for c in _NUM_COLS:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
     return df
+
+
+def load_sqlite(db_path):
+    """Load all orders from the live SQLite store."""
+    conn = sqlite3.connect(db_path)
+    df   = pd.read_sql("SELECT * FROM orders", conn)
+    conn.close()
+    if "order_date" in df.columns:
+        df["order_date"] = pd.to_datetime(df["order_date"], errors="coerce")
+    df = df.drop(columns=["_batch", "_ts"], errors="ignore")
+    return _coerce_numerics(df)
 
 
 # ── KPI Computation ───────────────────────────────────────────────────────────
@@ -165,8 +186,15 @@ def compute_demand_impact(df):
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
-def load_and_compute(csv_path=None):
-    df        = load_csv(csv_path)
+def load_and_compute(csv_path=None, sqlite_path=None):
+    """
+    Load data and compute all KPIs.
+    Priority: sqlite_path (live agent DB) > csv_path (static baseline).
+    """
+    if sqlite_path and os.path.exists(sqlite_path):
+        df = load_sqlite(sqlite_path)
+    else:
+        df = load_csv(csv_path)
     kpis      = compute_kpis(df)
     trend_df  = compute_trend(df)
     reason_df = compute_reason_performance(df)
